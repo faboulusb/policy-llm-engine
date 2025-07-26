@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-# Load .env file if available
+# Load variables from .env if it exists
 load_dotenv()
 
 class Config:
@@ -11,6 +11,11 @@ class Config:
 
     # --- Database Config ---
     POSTGRES_URI = os.getenv("POSTGRES_URI", "postgresql://user:password@localhost:5432/policy_llm")
+    DB_NAME = os.getenv("DB_NAME", "policy_llm")
+    DB_USER = os.getenv("DB_USER", "postgres")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
+    DB_HOST = os.getenv("DB_HOST", "localhost")
+    DB_PORT = int(os.getenv("DB_PORT", 5432))
 
     # --- Embedding Model ---
     EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
