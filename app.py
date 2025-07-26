@@ -4,8 +4,12 @@ from engine.retriever import retrieve_clauses
 from engine.reasoner import decide
 from engine.formatter import format_response
 from engine.session_manager import get_session_context, update_session
-from engine.db import log_query_and_response
-from engine.alternate_policy_recommender import suggest_alternatives
+from engine.db import log_user_query
+from engine.alternate_policy_recommender import recommend_alternatives
+
+# --- Optionally: Load data files if needed
+from utils.load_data import load_plan_data  # You can implement this wrapper
+plan_df, rate_df, benefits_df = load_plan_data()
 
 app = Flask(__name__)
 
@@ -13,30 +17,40 @@ app = Flask(__name__)
 def index():
     if request.method == "POST":
         user_query = request.form.get("query", "")
-        session_id = request.remote_addr  # basic fallback; replace with real session/token
+        session_id = request.remote_addr  # fallback identifier
 
-        # Step 1: Parse query
+        # Step 1: Parse
         parsed = parse_query(user_query)
 
-        # Step 2: Retrieve relevant clauses from SQL or FAISS
-        clauses = retrieve_clauses(parsed)
+        # Step 2: Retrieve matching clauses
+        matched_clauses = retrieve_clauses(parsed)
 
-        # Step 3: Apply LLM / logic to reason on clauses
-        decision = decide(parsed, clauses)
+        # Step 3: Reasoning with rules / LLM
+        decision = decide(parsed, matched_clauses)
 
-        # Step 4: Generate formatted structured JSON
-        response_json = format_response(user_query, parsed, clauses, decision)
+        # Step 4: Format structured response
+        response_json = format_response(user_query, parsed, matched_clauses, decision)
 
-        # Step 5: Log into PostgreSQL for audit
-        log_query_and_response(session_id, user_query, parsed, clauses, decision)
+        # Step 5: Log to DB
+        log_user_query(session_id, user_query, response_json)
 
-        # Step 6: Update session cache
+        # Step 6: Update session context
         update_session(session_id, user_query, response_json)
 
-        # Step 7: Get context-aware suggestions
-        suggestions = suggest_alternatives(parsed, decision)
+        # Step 7: Suggest alternates if rejected
+        alt_suggestions = []
+        if decision.get("decision", "").lower() == "rejected":
+            alt_suggestions = recommend_alternatives(
+                user_age=parsed.get("age"),
+                user_state=parsed.get("location"),
+                plan_df=plan_df,
+                rate_df=rate_df,
+                benefits_df=benefits_df,
+                base_coverage=parsed.get("coverage", 30000),
+                original_plan_type=parsed.get("plan_type", None)
+            )
 
-        return render_template("index.html", response=response_json, suggestions=suggestions)
+        return render_template("index.html", response=response_json, suggestions=alt_suggestions)
 
     return render_template("index.html")
 
@@ -47,20 +61,31 @@ def api_query():
     session_id = request.remote_addr
 
     parsed = parse_query(user_query)
-    clauses = retrieve_clauses(parsed)
-    decision = decide(parsed, clauses)
-    response_json = format_response(user_query, parsed, clauses, decision)
-    log_query_and_response(session_id, user_query, parsed, clauses, decision)
+    matched_clauses = retrieve_clauses(parsed)
+    decision = decide(parsed, matched_clauses)
+    response_json = format_response(user_query, parsed, matched_clauses, decision)
+    log_user_query(session_id, user_query, response_json)
     update_session(session_id, user_query, response_json)
-    suggestions = suggest_alternatives(parsed, decision)
+
+    alt_suggestions = []
+    if decision.get("decision", "").lower() == "rejected":
+        alt_suggestions = recommend_alternatives(
+            user_age=parsed.get("age"),
+            user_state=parsed.get("location"),
+            plan_df=plan_df,
+            rate_df=rate_df,
+            benefits_df=benefits_df,
+            base_coverage=parsed.get("coverage", 30000),
+            original_plan_type=parsed.get("plan_type", None)
+        )
 
     return jsonify({
         "response": response_json,
-        "suggestions": suggestions
+        "suggestions": alt_suggestions
     })
 
 @app.route("/api/context", methods=["GET"])
-def get_context():
+def api_context():
     session_id = request.remote_addr
     return jsonify(get_session_context(session_id))
 
