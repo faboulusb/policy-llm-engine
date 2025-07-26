@@ -31,3 +31,7 @@ accelerate==0.30.1
 
 # Env & utility
 python-dotenv==1.0.1
+# Dev / Test
+pytest==8.2.1
+black==24.4.2
+
