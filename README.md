@@ -33,8 +33,3 @@ policy-llm-engine/
 │
 ├── models/
 │   └── llm_local_runner.py
-│
-└── tests/
-    ├── test_parser.py
-    ├── test_retriever.py
-    └── test_reasoner.py
