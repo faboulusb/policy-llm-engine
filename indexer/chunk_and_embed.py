@@ -40,7 +40,11 @@ def process_file(file_path, doc_type):
     elif file_path.endswith(".docx"):
         text = extract_text_from_docx(file_path)
     else:
-        print("❌ Unsupported file type:", file_path)
+        print(f"⚠️ Skipped unsupported file type: {file_path}")
+        return [], []
+
+    if not text.strip():
+        print(f"⚠️ Skipped empty document: {file_path}")
         return [], []
 
     chunks = chunk_text(text, Config.CHUNK_SIZE, Config.OVERLAP_SIZE)
@@ -62,6 +66,12 @@ def build_faiss_index(all_embeddings: List[np.ndarray], save_path: str):
     faiss.write_index(index, save_path)
     print(f"✅ FAISS index saved at: {save_path}")
 
+def save_metadata(metadata, save_path="data/embeddings/chunk_metadata.json"):
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with open(save_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2)
+    print(f"✅ Metadata saved to: {save_path}")
+
 def run_indexing():
     root_dirs = {
         "data/policies/": "policy",
@@ -82,8 +92,10 @@ def run_indexing():
                     all_metadata.extend(metadata)
 
     if all_embeddings:
+        all_vectors = np.vstack(all_embeddings)
         build_faiss_index(all_embeddings, Config.FAISS_INDEX_PATH)
-        save_chunks_to_db(all_metadata, np.vstack(all_embeddings))
+        save_metadata(all_metadata)
+        save_chunks_to_db(all_metadata, all_vectors)
         print("✅ All embeddings and metadata saved.")
 
 if __name__ == "__main__":
